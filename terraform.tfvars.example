@@ -1,0 +1,75 @@
+# ==============================================================================
+# terraform.tfvars.example
+# Copia este archivo como terraform.tfvars y ajusta los valores.
+# NUNCA subas terraform.tfvars a control de versiones (contiene datos sensibles).
+# ==============================================================================
+
+# ----------------------------------------------------------------
+# REGIÓN AWS
+# Descomenta la región que prefieras:
+# ----------------------------------------------------------------
+aws_region = "us-east-1"    # N. Virginia — Recomendada para Free Tier
+# aws_region = "us-west-2"  # Oregon
+# aws_region = "us-east-2"  # Ohio
+# aws_region = "sa-east-1"  # São Paulo (latencia baja desde México)
+
+# ----------------------------------------------------------------
+# IDENTIFICADORES DEL PROYECTO
+# ----------------------------------------------------------------
+project_name = "soc-ezekiel"
+environment  = "dev"
+
+# Tu AWS Account ID (12 dígitos)
+# Obtén el tuyo: aws sts get-caller-identity --query Account --output text
+account_id = "123456789012"  # <-- REEMPLAZA CON TU ACCOUNT ID
+
+# ----------------------------------------------------------------
+# NOTIFICACIONES
+# ----------------------------------------------------------------
+alert_email       = "231011@utags.edu.mx"
+enable_sms_alerts = false      # true para activar SMS (costo adicional)
+alert_phone       = ""         # "+521XXXXXXXXXX" si enable_sms_alerts = true
+
+# ----------------------------------------------------------------
+# SIEM — Retención de Logs
+# ----------------------------------------------------------------
+log_retention_days     = 14   # 2 semanas en CloudWatch (Free Tier: 5GB)
+s3_log_retention_days  = 30   # 30 días en S3 Standard, luego Glacier
+s3_log_expiration_days = 90   # Eliminar después de 90 días
+
+# ----------------------------------------------------------------
+# EDR/XDR — Detección
+# ----------------------------------------------------------------
+enable_guardduty            = true
+enable_security_hub         = true
+enable_inspector            = false   # true si tienes instancias EC2 o contenedores
+guardduty_finding_frequency = "SIX_HOURS"  # Más económico que FIFTEEN_MINUTES
+
+# ----------------------------------------------------------------
+# SOAR — Respuesta Automática
+# ⚠ CUIDADO: auto_remediation_enabled = true puede aislar instancias automáticamente
+# ----------------------------------------------------------------
+auto_remediation_enabled          = false   # Cambia a true en producción con precaución
+severity_threshold_auto_remediate = 8       # 8 = Crítico (escala 1-10)
+
+# ----------------------------------------------------------------
+# THREAT INTELLIGENCE
+# ----------------------------------------------------------------
+enable_custom_threat_intel = true
+threat_intel_ipset_file    = "threat-intel/malicious-ips.txt"
+
+# ----------------------------------------------------------------
+# NETWORKING
+# ----------------------------------------------------------------
+vpc_cidr            = "10.10.0.0/16"
+public_subnet_cidr  = "10.10.1.0/24"
+private_subnet_cidr = "10.10.10.0/24"
+
+# ----------------------------------------------------------------
+# TAGS ADICIONALES
+# ----------------------------------------------------------------
+common_tags = {
+  Universidad = "UTAGS"
+  Proyecto    = "SOC-Tesis"
+  Año         = "2024"
+}

@@ -1,0 +1,175 @@
+@startuml Diagrama_Codigo_Terraform_SOC
+!theme plain
+skinparam backgroundColor #1a1a2e
+skinparam defaultFontName "Courier New"
+skinparam defaultFontSize 11
+skinparam defaultFontColor #e0e0e0
+skinparam ArrowColor #00bcd4
+skinparam ArrowThickness 2
+
+skinparam package {
+  BackgroundColor #16213e
+  BorderColor #0f3460
+  BorderThickness 2
+  FontColor #e0e0e0
+  FontStyle bold
+  FontSize 12
+}
+
+skinparam component {
+  BackgroundColor #0f3460
+  BorderColor #00bcd4
+  FontColor #ffffff
+  BorderThickness 1
+}
+
+skinparam note {
+  BackgroundColor #e94560
+  BorderColor #c62a47
+  FontColor #ffffff
+}
+
+skinparam legend {
+  BackgroundColor #16213e
+  BorderColor #00bcd4
+  FontColor #e0e0e0
+}
+
+title \n<size:18><color:#00bcd4><b>SOC en AWS — Estructura del Código Terraform</b></color></size>\n<size:12><color:#90a4ae>Módulos, Recursos y Dependencias</color></size>\n
+
+'==============================================================
+' MÓDULO RAÍZ
+'==============================================================
+package "📁 Módulo Raíz (root)" as ROOT #1a2a4a {
+  component "main.tf\n<size:9>Orquestador principal\nInstancia todos los módulos</size>" as MAIN_TF #0d47a1
+  component "variables.tf\n<size:9>Variables globales\nRegión, email, flags</size>" as VAR_TF #0d47a1
+  component "outputs.tf\n<size:9>Outputs: ARNs,\nURLs de consola</size>" as OUT_TF #0d47a1
+  component "versions.tf\n<size:9>Terraform >=1.5\nAWS ~>5.0</size>" as VER_TF #0d47a1
+  component "terraform.tfvars.example\n<size:9>Variables de ejemplo\npara el estudiante</size>" as TFVARS #0d47a1
+
+  component "aws_sns_topic\n<size:9>Alertas de seguridad\n→ 231011@utags.edu.mx</size>" as SNS_ROOT #1565c0
+  component "aws_ssm_parameter\n<size:9>Config compartida\nBlocklist de IPs</size>" as SSM_ROOT #1565c0
+}
+
+'==============================================================
+' MÓDULO NETWORKING
+'==============================================================
+package "🌐 Módulo: Networking" as NET_MOD #1a3a2a {
+  component "aws_vpc\n<size:9>10.10.0.0/16\nDNS habilitado</size>" as VPC
+  component "aws_subnet\n<size:9>Pública /24\nPrivada /24</size>" as SUBNET
+  component "aws_internet_gateway\n<size:9>Salida a internet\n(subred pública)</size>" as IGW
+  component "aws_security_group x2\n<size:9>sg-lambda (SOAR)\nsg-isolation (cuarentena)</size>" as SG
+  component "aws_flow_log\n<size:9>VPC → S3\nTodo el tráfico</size>" as FLOWLOG
+}
+
+'==============================================================
+' MÓDULO SIEM
+'==============================================================
+package "📊 Módulo: SIEM" as SIEM_MOD #3a1a1a {
+  component "aws_s3_bucket\n<size:9>soc-logs-{account_id}\nCifrado AES256</size>" as S3_SIEM
+  component "aws_cloudtrail\n<size:9>Trail completo\nManagement Events</size>" as TRAIL
+  component "aws_cloudwatch_log_group x3\n<size:9>cloudtrail, guardduty,\nsoar-actions</size>" as CW_LOGS
+  component "aws_cloudwatch_log_metric_filter x7\n<size:9>Root, UnauthorizedAPI, NoMFA,\nSG changes, IAM, CloudTrail, AuthFail</size>" as CW_FILTERS
+  component "aws_cloudwatch_metric_alarm x7\n<size:9>Alertas en tiempo real\n→ SNS</size>" as CW_ALARMS
+  component "aws_cloudwatch_dashboard\n<size:9>SOC Overview\n5 widgets de seguridad</size>" as CW_DASH
+  component "aws_s3_bucket_lifecycle\n<size:9>30d → Glacier\n90d → Eliminar</size>" as S3_LIFE
+}
+
+'==============================================================
+' MÓDULO EDR/XDR
+'==============================================================
+package "🛡️ Módulo: EDR/XDR" as EDR_MOD #3a2a1a {
+  component "aws_guardduty_detector\n<size:9>ML Detection\nS3+CloudTrail+DNS</size>" as GD
+  component "aws_securityhub_account\n<size:9>CIS Benchmark\nAWS Foundational</size>" as SH
+  component "aws_inspector2_enabler\n<size:9>EC2 + ECR CVEs\n(opcional)</size>" as INSP
+  component "aws_accessanalyzer_analyzer\n<size:9>Detecta acceso\nexterno no deseado</size>" as ANALYZER
+  component "aws_cloudwatch_event_rule x3\n<size:9>GuardDuty findings\nSecHub findings\nSecHub insights</size>" as EB_EDR
+  component "aws_securityhub_product_subscription\n<size:9>GuardDuty+Inspector\n+Access Analyzer</size>" as SH_SUBS
+}
+
+'==============================================================
+' MÓDULO SOAR
+'==============================================================
+package "⚡ Módulo: SOAR" as SOAR_MOD #2a1a3a {
+  component "aws_lambda_function\nauto_remediate.py\n<size:9>Aísla EC2, deshabilita\nkeys IAM, bloquea IPs</size>" as LAMBDA_REM
+  component "aws_lambda_function\nenrich_finding.py\n<size:9>GeoIP, contexto EC2,\nnotas analista</size>" as LAMBDA_ENR
+  component "aws_sfn_state_machine\n<size:9>Playbook 6 estados:\nEnriquecer→Evaluar\n→Remediar→Notificar</size>" as SFN
+  component "aws_cloudwatch_event_rule x2\n<size:9>GuardDuty→SOAR\nSecHub→SNS</size>" as EB_SOAR
+  component "aws_iam_role x5\n<size:9>Lambda-remediation\nLambda-enrich\nStepFunctions\nEventBridge\n+policies</size>" as IAM_SOAR
+  component "archive_file (ZIP)\n<size:9>Empaqueta Lambda\npara despliegue</size>" as ZIP
+}
+
+'==============================================================
+' MÓDULO THREAT INTEL
+'==============================================================
+package "🔍 Módulo: Threat Intel" as TI_MOD #1a2a3a {
+  component "aws_guardduty_ipset\n<size:9>IPs maliciosas\nactivadas en GD</size>" as GD_IPSET
+  component "aws_guardduty_threatintelset\n<size:9>Dominios maliciosos\nactivados en GD</size>" as GD_TISET
+  component "aws_s3_object x2\n<size:9>malicious-ips.txt\nmalicious-domains.txt</size>" as S3_TI
+  component "aws_accessanalyzer_analyzer\n<size:9>Superficie de ataque\ncuenta ACCOUNT</size>" as ANALYZER_TI
+  component "aws_cloudwatch_event_rule\n<size:9>Access Analyzer\nFindings → SNS</size>" as EB_TI
+  component "aws_cloudwatch_dashboard\n<size:9>Threat Intelligence\nOverview</size>" as TI_DASH
+}
+
+'==============================================================
+' DEPENDENCIAS Y FLUJO
+'==============================================================
+
+' Root → Módulos
+MAIN_TF -down-> NET_MOD : "module.networking"
+MAIN_TF -down-> SIEM_MOD : "module.siem"
+MAIN_TF -down-> EDR_MOD : "module.edr_xdr"
+MAIN_TF -down-> SOAR_MOD : "module.soar"
+MAIN_TF -down-> TI_MOD : "module.threat_intel"
+
+' SNS central → todos los módulos
+SNS_ROOT -[#ff9800,dashed]-> CW_ALARMS : "sns_alert_topic_arn"
+SNS_ROOT -[#ff9800,dashed]-> SOAR_MOD : "sns_alert_topic_arn"
+SNS_ROOT -[#ff9800,dashed]-> TI_MOD : "sns_alert_topic_arn"
+
+' Dependencias entre módulos
+SIEM_MOD -[#4caf50]-> NET_MOD : "logs_s3_bucket_arn\n(VPC Flow Logs → S3)"
+EDR_MOD -[#00bcd4]-> SOAR_MOD : "guardduty_detector_id\nevent_rule_names"
+NET_MOD -[#f44336]-> SOAR_MOD : "isolation_sg_id\n(cuarentena EC2)"
+SIEM_MOD -[#4caf50]-> TI_MOD : "logs_bucket_id\n(IPSets en S3)"
+EDR_MOD -[#00bcd4]-> TI_MOD : "guardduty_detector_id\n(IPSets/TISets)"
+
+' Flujo interno SIEM
+S3_SIEM -down-> TRAIL : "s3_bucket_name"
+TRAIL -down-> CW_LOGS : "cloudwatch_logs_group"
+CW_LOGS -down-> CW_FILTERS : "log_group_name"
+CW_FILTERS -down-> CW_ALARMS : "metric_transformation"
+CW_ALARMS -[#ff9800]-> SNS_ROOT : "alarm_actions"
+
+' Flujo interno SOAR
+ZIP -down-> LAMBDA_REM : "empaqueta Python"
+ZIP -down-> LAMBDA_ENR : "empaqueta Python"
+EB_SOAR -down-> LAMBDA_ENR : "trigger"
+EB_SOAR -down-> SFN : "StartExecution"
+SFN -down-> LAMBDA_ENR : "Task: Enriquecer"
+SFN -down-> LAMBDA_REM : "Task: Remediar"
+
+' Flujo TI
+S3_TI -down-> GD_IPSET : "location (S3 URL)"
+S3_TI -down-> GD_TISET : "location (S3 URL)"
+
+note bottom of SOAR_MOD
+  <color:#ffffff>auto_remediation_enabled = false (default)</color>
+  <color:#ffeb3b>⚠ Cambiar a true solo en producción</color>
+end note
+
+note right of SNS_ROOT
+  <color:#ffffff>Email: 231011@utags.edu.mx</color>
+  <color:#90a4ae>Confirmar suscripción en bandeja</color>
+end note
+
+legend bottom
+  | Color | Significado |
+  | <#4caf50>▬▬▬</color> | Datos de logs fluyen al SIEM |
+  | <#ff9800>▬▬▬</color> | Alertas hacia SNS |
+  | <#00bcd4>▬▬▬</color> | IDs de detectores entre módulos |
+  | <#f44336>▬▬▬</color> | Security Group de aislamiento |
+  | <#e94560>——</color> | Flujo de remediación activo |
+endlegend
+
+@enduml

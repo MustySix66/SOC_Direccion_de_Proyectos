@@ -1,0 +1,222 @@
+@startuml Diagrama_Funcional_SOC_AWS
+!theme plain
+skinparam backgroundColor #0d1117
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 11
+skinparam defaultFontColor #c9d1d9
+
+skinparam sequence {
+  ArrowColor #58a6ff
+  ArrowThickness 2
+  LifeLineBorderColor #30363d
+  LifeLineBackgroundColor #161b22
+  ParticipantBackgroundColor #21262d
+  ParticipantBorderColor #30363d
+  ParticipantFontColor #f0f6fc
+  ActorBackgroundColor #1f6feb
+  ActorBorderColor #58a6ff
+  ActorFontColor #ffffff
+  BoxBackgroundColor #161b22
+  BoxBorderColor #30363d
+}
+
+skinparam note {
+  BackgroundColor #1f3a5f
+  BorderColor #58a6ff
+  FontColor #e6edf3
+}
+
+title \n<size:20><color:#58a6ff><b>SOC en AWS — Flujo Funcional de Operaciones</b></color></size>\n<size:12><color:#8b949e>Detección → Enriquecimiento → Respuesta → Notificación</color></size>\n
+
+'==============================================================
+' ACTORES Y PARTICIPANTES
+'==============================================================
+actor "<color:#ffa657>Atacante</color>\n<size:9>Agente malicioso\nexterno/interno</size>" as ATACANTE
+actor "<color:#3fb950>Analista SOC</color>\n<size:9>231011@utags.edu.mx\nUTAGS</size>" as ANALISTA
+
+box "<color:#58a6ff>━━━ FUENTES DE EVENTOS ━━━</color>" #0d1117
+  participant "Recursos AWS\n<size:9>EC2, IAM, S3\nRed, DNS</size>" as RECURSOS
+  participant "VPC Flow Logs\n<size:9>+ CloudTrail\n+ DNS Logs</size>" as SOURCES
+end box
+
+box "<color:#3fb950>━━━ EDR / XDR ━━━</color>" #0d2010
+  participant "Amazon\nGuardDuty\n<size:9>ML Detection</size>" as GD
+  participant "AWS\nSecurity Hub\n<size:9>Aggregator</size>" as SH
+  participant "IAM Access\nAnalyzer\n<size:9>Exposure</size>" as AA
+end box
+
+box "<color:#ffa657>━━━ SIEM ━━━</color>" #201800
+  participant "CloudTrail\n<size:9>Audit Logs</size>" as CT
+  participant "CloudWatch\nLogs + Metrics\n<size:9>SIEM Engine</size>" as CW
+  participant "S3 Logs\n<size:9>Long-term\nStorage</size>" as S3
+end box
+
+box "<color:#e040fb>━━━ SOAR ━━━</color>" #1a0020
+  participant "EventBridge\n<size:9>Event Router</size>" as EB
+  participant "Lambda\nEnriquecimiento\n<size:9>Context Enricher</size>" as ENR
+  participant "Step Functions\n<size:9>Playbook Engine</size>" as SFN
+  participant "Lambda\nAuto-Remediación\n<size:9>Responder</size>" as REM
+end box
+
+box "<color:#ff5555>━━━ THREAT INTEL ━━━</color>" #200010
+  participant "GuardDuty\nIPSets/TISets\n<size:9>IOC Database</size>" as TI
+  participant "SSM\nBlocklist\n<size:9>IP Blocklist</size>" as SSM
+end box
+
+participant "SNS\n<size:9>Email Alert\n231011@utags</size>" as SNS
+
+'==============================================================
+' ESCENARIO 1: ATAQUE Y DETECCIÓN
+'==============================================================
+== <color:#ff7b72>⚔️ ESCENARIO 1: Reconocimiento de Red / Brute Force</color> ==
+
+ATACANTE -[#ff4444]-> RECURSOS : <color:#ff7b72>1. Escaneo de puertos / Fuerza bruta SSH</color>
+activate RECURSOS #2d1515
+
+RECURSOS ->> SOURCES : 2. Genera tráfico en VPC\n<size:9>IP src: X.X.X.X → port: 22/3389</size>
+activate SOURCES #1a2a1a
+
+SOURCES ->> GD : 3. Análisis en tiempo real\n<size:9>VPC Flow Logs + CloudTrail + DNS</size>
+activate GD #0d2010
+
+note over GD
+  <color:#58a6ff>GuardDuty ML detecta:</color>
+  <color:#ffa657>• SSHBruteForce</color>
+  <color:#ffa657>• RDPBruteForce</color>
+  <color:#ffa657>• PortProbeUnprotectedPort</color>
+  <color:#ffa657>Severidad: 5.0 (MEDIUM)</color>
+end note
+
+GD ->> TI : 4. Verifica IP contra IPSets/TISets
+activate TI #200010
+TI -->> GD : <color:#ff5555>IP en lista de amenazas → Severidad +2</color>
+deactivate TI
+
+GD ->> SH : 5. Publica finding en Security Hub\n<size:9>Formato ASFF estandarizado</size>
+GD ->> EB : 6. EventBridge: GuardDuty Finding\n<size:9>severity >= 5</size>
+deactivate GD
+
+'==============================================================
+' FLUJO SOAR
+'==============================================================
+== <color:#e040fb>⚡ SOAR: Orquestación Automática de Respuesta</color> ==
+
+EB ->> ENR : 7. Trigger Lambda Enriquecimiento
+activate ENR #1a0020
+
+ENR ->> SSM : 8. Verifica IP en Blocklist
+SSM -->> ENR : 8b. ¿IP bloqueada? Sí/No
+ENR ->> RECURSOS : 8c. Obtiene contexto EC2/IAM\n<size:9>describe_instances, tags, SGs</size>
+RECURSOS -->> ENR : 8d. Instance details, network interfaces
+
+note over ENR
+  <color:#58a6ff>Finding Enriquecido:</color>
+  <color:#3fb950>• GeoIP: País, Ciudad, ISP</color>
+  <color:#3fb950>• EC2: tipo, estado, SGs actuales</color>
+  <color:#3fb950>• Blocklist: IP en lista → alta confianza</color>
+  <color:#3fb950>• Notas analista: acciones recomendadas</color>
+end note
+
+ENR ->> SFN : 9. Inicia Playbook Step Functions\n<size:9>Con finding enriquecido</size>
+deactivate ENR
+activate SFN #1a0020
+
+SFN -> SFN : 10. Estado: EvaluarSeveridad\n<size:9>severity >= 8? → RemediacionCritica\nseverity >= 5? → RemediacionAlta\ndefault → SoloNotificar</size>
+
+SFN ->> REM : 11. Task: RemediacionAlta\n<size:9>(severity = 7, IP en blocklist)</size>
+activate REM #1a0020
+
+REM ->> SSM : 12a. Agrega IP a Blocklist\n<size:9>SSM Parameter Store</size>
+REM ->> RECURSOS : 12b. Aísla instancia EC2\n<size:9>Asigna sg-isolation (sin tráfico)</size>
+note right of RECURSOS
+  <color:#ff5555>EC2 AISLADA:</color>
+  SGs originales → [sg-isolation]
+  Tags: soc:estado = AISLADA
+  Sin ingress/egress
+end note
+REM -->> SFN : 12c. Acciones completadas
+deactivate REM
+
+SFN ->> SNS : 13. NotificarAlto\n<size:9>[SOC-ALTO] Finding ID, acciones, timestamp</size>
+deactivate SFN
+
+'==============================================================
+' ESCENARIO 2: IAM COMPROMETIDO
+'==============================================================
+== <color:#ff7b72>⚔️ ESCENARIO 2: Credenciales IAM Comprometidas</color> ==
+
+ATACANTE -[#ff4444]-> RECURSOS : <color:#ff7b72>Acceso con credenciales robadas\n<size:9>API calls desde IP inusual / horario anómalo</size></color>
+RECURSOS ->> CT : Registra API calls en CloudTrail
+activate CT #201800
+
+CT ->> CW : Logs → CloudWatch\n<size:9>/aws/cloudtrail/soc-ezekiel</size>
+activate CW #201800
+
+CW -> CW : Metric Filter detecta:\n<size:9>UnauthorizedApiCalls >= 5</size>
+
+CW ->> SNS : <color:#ffa657>Alarma CloudWatch → SNS</color>\n<size:9>[ALTO] Unauthorized API Calls</size>
+deactivate CW
+
+CT ->> S3 : Logs archivados en S3\n<size:9>cloudtrail/AWSLogs/{account_id}/*</size>
+deactivate CT
+
+GD -> GD : <color:#ffa657>GuardDuty detecta:\nUnauthorizedAccess:IAMUser\nAnomalousBehavior:IAMUser\nSeveridad: 8.5 (HIGH)</color>
+
+GD ->> EB : EventBridge: severity >= 8
+EB ->> SFN : Playbook: RemediacionCritica
+
+SFN ->> REM : Lambda Auto-Remediación\n<size:9>Tipo: IAM Anomaly</size>
+activate REM #1a0020
+REM ->> RECURSOS : <color:#ff5555>Deshabilita AccessKey IAM</color>\n<size:9>UpdateAccessKey → Inactive\nTag user: soc:estado = SUSPENDIDO</size>
+REM -->> SFN : Key deshabilitada
+deactivate REM
+
+SFN ->> SNS : [SOC-CRITICO] Key IAM deshabilitada\n<size:9>Requiere revisión urgente</size>
+SNS -[#3fb950]-> ANALISTA : <color:#3fb950>Email: [SOC-CRITICO]\nInforme detallado del incidente</color>
+
+'==============================================================
+' ESCENARIO 3: ACCESO PÚBLICO DETECTADO
+'==============================================================
+== <color:#ffa657>🔍 ESCENARIO 3: Recurso Expuesto Detectado (Threat Intel)</color> ==
+
+AA -> AA : IAM Access Analyzer escanea\npermanentemente la cuenta
+AA ->> EB : Access Analyzer Finding\n<size:9>Recurso S3/IAM con acceso externo</size>
+EB ->> SNS : EventBridge → SNS directo\n<size:9>[SOC-IAMAnalyzer] Recurso expuesto</size>
+SNS -[#3fb950]-> ANALISTA : <color:#3fb950>Email: Bucket S3 con acceso público\nURL: Access Analyzer Console</color>
+
+'==============================================================
+' REVISIÓN MANUAL DEL ANALISTA
+'==============================================================
+== <color:#3fb950>👁️ Revisión y Cierre del Incidente</color> ==
+
+ANALISTA -[#3fb950]-> SH : Revisa findings en Security Hub\n<size:9>console.aws.amazon.com/securityhub</size>
+SH -->> ANALISTA : Dashboard CIS Benchmark\nScores de cumplimiento
+
+ANALISTA -[#3fb950]-> CW : Consulta dashboard SOC Overview\n<size:9>CloudWatch Logs Insights queries</size>
+CW -->> ANALISTA : Métricas, logs históricos,\ntimeline del incidente
+
+ANALISTA -[#3fb950]-> RECURSOS : Restaura instancia EC2 si procede\n<size:9>Asigna SGs originales,\nelimina tag soc:estado</size>
+
+note over ANALISTA, SNS
+  <color:#58a6ff>📧 Todas las alertas van a: 231011@utags.edu.mx</color>
+  <color:#8b949e>Confirmar suscripción SNS en la bandeja de entrada</color>
+  <color:#8b949e>después del primer terraform apply</color>
+end note
+
+deactivate RECURSOS
+deactivate SOURCES
+
+'==============================================================
+' FLUJO CONTINUO DE SIEM
+'==============================================================
+== <color:#ffa657>📊 SIEM: Monitoreo Continuo (Background)</color> ==
+
+loop <color:#58a6ff>Continuo (24/7)</color>
+  RECURSOS ->> CT : Toda acción en AWS genera logs\n<size:9>Quien, qué, cuándo, desde dónde</size>
+  CT ->> S3 : Archiva logs cifrados\n<size:9>AES256, Lifecycle: 30d→Glacier→90d delete</size>
+  CT ->> CW : Logs en tiempo real\n<size:9>Retención: 14 días</size>
+  CW -> CW : Evalúa 7 Metric Filters\n<size:9>Cada 5 minutos</size>
+  CW -[#ff9800,dashed]->> SNS : Si alarma dispara\n<size:9>(umbral superado)</size>
+end
+
+@enduml

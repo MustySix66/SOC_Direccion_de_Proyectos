@@ -1,0 +1,47 @@
+# ============================================================
+# .gitignore — SOC Ezekiel Terraform
+# ============================================================
+
+# Terraform state files (NUNCA subir al repositorio)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Variables con datos sensibles
+terraform.tfvars
+*.tfvars
+!terraform.tfvars.example   # El ejemplo SÍ se puede subir
+
+# Terraform local files
+.terraform/
+.terraform.lock.hcl
+.terraform.tfplan
+
+# Plan files (pueden contener secretos)
+*.tfplan
+*.plan
+
+# Lambda ZIP packages (generados automáticamente por Terraform)
+modules/soar/lambda/*.zip
+
+# Logs y outputs locales
+*.log
+crash.log
+crash.*.log
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# IDE y SO
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# Terraform override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
