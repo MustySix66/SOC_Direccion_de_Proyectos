@@ -1,12 +1,12 @@
 # Centro de Operaciones de Seguridad (SOC) Automatizado en AWS
 
-Este repositorio contiene la arquitectura de infraestructura como código (IaC) en Terraform para el despliegue de un **SOC (Security Operations Center) Automatizado y Optimizado para Free Tier** en Amazon Web Services (AWS). El diseño está enfocado en proporcionar capacidades completas de auditoría, monitoreo, detección de intrusos y respuesta automática ante incidentes con costos mínimos o nulos.
+Este repositorio contiene la arquitectura de infraestructura como código (IaC) en Terraform para el despliegue de un **SOC (Security Operations Center) Automatizado y Optimizado para el Nivel Gratuito (Free Tier)** de Amazon Web Services (AWS). El diseño proporciona capacidades completas de auditoría, monitoreo, detección de intrusos y respuesta automática ante incidentes con costos mínimos o nulos.
 
 ---
 
 ## 👥 Presentación del Equipo y Proyecto
 
-Este proyecto fue desarrollado como parte de la materia **Dirección de Proyectos II** en la **Universidad Tecnológica de Aguascalientes**.
+Este proyecto fue desarrollado en la materia **Dirección de Proyectos II** en la **Universidad Tecnológica de Aguascalientes**.
 
 * **Institución:** Universidad Tecnológica de Aguascalientes (UTA)
 * **Materia:** Dirección de Proyectos II
@@ -17,100 +17,134 @@ Este proyecto fue desarrollado como parte de la materia **Dirección de Proyecto
 
 ---
 
-## 🛠️ Arquitectura Técnica y Módulos
+## 📋 Requisitos de Software
 
-El SOC está compuesto por cinco pilares fundamentales orquestados desde el módulo raíz:
+Antes de iniciar con el despliegue, asegúrate de contar con las siguientes herramientas instaladas y configuradas:
 
-```mermaid
-graph TD
-    Root[Módulo Raíz] --> Net[1. Networking]
-    Root --> SIEM[2. SIEM]
-    Root --> EDR[3. EDR/XDR]
-    Root --> SOAR[4. SOAR]
-    Root --> TI[5. Threat Intel]
+1. **Cuenta Activa de AWS:** Se recomienda una cuenta en el nivel gratuito (Free Tier) o cuenta de estudiante.
+2. **AWS CLI (Interfaz de Línea de Comandos):** Versión 2.x instalada. Debes configurar tus credenciales locales ejecutando:
+   ```bash
+   aws configure
+   ```
+3. **Terraform:** Versión `>= 1.5.0` instalada localmente.
+4. **Git:** Para control de versiones y clonación de este repositorio.
+5. **Visor de Diagramas (Opcional):** Extensión de PlantUML en tu IDE para visualizar la arquitectura de los diagramas incluidos.
 
-    SIEM -->|Logs de red| Net
-    EDR -->|Eventos de amenazas| SOAR
-    TI -->|Listas de IPs| EDR
+---
+
+## 🚀 Instrucciones de Instalación Paso a Paso
+
+Sigue estos pasos detallados para desplegar el SOC completo en tu cuenta de AWS:
+
+### Paso 1: Clonar el Repositorio
+Clona este repositorio en tu máquina local y accede a la carpeta raíz:
+```bash
+git clone https://github.com/MustySix66/SOC_Direccion_de_Proyectos.git
+cd SOC_Direccion_de_Proyectos
 ```
 
-### 1. [Networking](file:///d:/DevOps/SOC%20Ezekiel/modules/networking) (Red Segura)
-Establece la infraestructura de red aislada donde operan los recursos.
-* **Componentes:** VPC (`10.10.0.0/16`), subred pública (para bastion/sensores) y privada (para cargas de trabajo).
-* **Seguridad:** Security Groups específicos, incluyendo uno dedicado a la **Cuarentena/Aislamiento** (`sg-isolation`) para recursos comprometidos.
-* **Auditoría:** Habilita **VPC Flow Logs** dirigidos a S3 para auditoría de tráfico de red.
+### Paso 2: Crear el archivo de Variables
+Crea una copia del archivo de ejemplo para configurar tus variables personalizadas:
+```bash
+cp terraform.tfvars.example terraform.tfvars
+```
+Abre el archivo `terraform.tfvars` recién creado con tu editor de texto y define:
+* `aws_region`: La región de AWS (ej. `"us-east-1"`).
+* `account_id`: Tu ID de cuenta de AWS de 12 dígitos.
+* `alert_email`: Correo electrónico donde quieres recibir las notificaciones del SOC (ej. `tu-correo@utags.edu.mx`).
 
-### 2. [SIEM](file:///d:/DevOps/SOC%20Ezekiel/modules/siem) (Monitoreo e Integridad)
-Centraliza la recolección, filtrado y alertamiento sobre los eventos de auditoría de la infraestructura.
-* **CloudTrail:** Configurado para registrar eventos de gestión a nivel de API de forma gratuita (Single-Region).
-* **CloudWatch:** Centraliza los logs con retención de 14 días (ajustada para el Free Tier de 5GB). Cuenta con 7 filtros métricos críticos (ej. intentos de inicio de sesión sin MFA, cambios en Security Groups, acciones del usuario `root`).
-* **S3 con Ciclo de Vida:** Los logs se almacenan en S3 y se mueven automáticamente a Glacier a los 30 días para ahorrar costos, destruyéndose a los 90 días.
+### Paso 3: Inicializar el Directorio de Terraform
+Descarga los proveedores necesarios y los módulos internos:
+```bash
+terraform init
+```
 
-### 3. [EDR/XDR](file:///d:/DevOps/SOC%20Ezekiel/modules/edr_xdr) (Detección y Postura)
-Monitorea continuamente la cuenta y recursos en busca de anomalías y malware.
-* **Amazon GuardDuty:** Habilita la detección de amenazas mediante Machine Learning (comportamiento anómalo de APIs, escaneos de puertos, etc.).
-* **AWS Security Hub:** Consolida los hallazgos de seguridad y evalúa la postura frente a estándares como el *CIS AWS Foundations Benchmark*.
-* **IAM Access Analyzer:** Identifica recursos expuestos públicamente o compartidos fuera de la cuenta.
+### Paso 4: Validar y Planificar los Recursos
+Genera el plan de ejecución de Terraform para verificar que no haya errores y ver qué recursos serán creados:
+```bash
+terraform plan
+```
 
-### 4. [SOAR](file:///d:/DevOps/SOC%20Ezekiel/modules/soar) (Orquestación y Respuesta Automática)
-Permite reaccionar a amenazas críticas en cuestión de segundos sin intervención humana.
-* **EventBridge:** Captura los hallazgos de GuardDuty y Security Hub.
-* **Step Functions (Playbook):** Modela un flujo de respuesta en 6 etapas que incluye el enriquecimiento de la alerta (GeoIP), evaluación de severidad, remediación y notificación.
-* **Lambdas en Python:** Una función enriquece los datos de la alerta y otra ejecuta acciones correctivas (bloqueo de IPs de atacantes, aislamiento de red de instancias EC2 y desactivación de credenciales IAM comprometidas).
+### Paso 5: Desplegar la Infraestructura
+Aplica los cambios en AWS. Escribe `yes` cuando la consola te pida confirmación:
+```bash
+terraform apply
+```
 
-### 5. [Threat Intel](file:///d:/DevOps/SOC%20Ezekiel/modules/threat_intel) (Inteligencia de Amenazas)
-Alimenta a GuardDuty con indicadores de compromiso (IoC) personalizados.
-* **IPSets/ThreatIntelSets:** Sincroniza dinámicamente archivos de texto plano almacenados en S3 que contienen listas de direcciones IP conocidas por realizar actividades maliciosas.
-
----
-
-## 🔒 Buenas Prácticas de Seguridad (Exclusiones para Publicación)
-
-Por motivos de seguridad y para proteger la infraestructura del cliente, **este repositorio no almacena ni expone información sensible**:
-
-> [!WARNING]
-> * **Credenciales e Identidades:** Nunca se incluyen claves de acceso (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) en el código. Se utilizan roles de IAM con privilegios mínimos y perfiles locales de AWS CLI.
-> * **Identificadores Únicos:** El ID de cuenta de AWS real se ha parametrizado mediante variables. El archivo `variables.tf` usa un ID genérico por defecto (`123456789012`).
-> * **Archivos de Variables Locales (`.tfvars`):** El archivo real `terraform.tfvars` contiene información específica del cliente (dirección de correo del analista, teléfonos) y está excluido de Git a través de [.gitignore](file:///d:/DevOps/SOC%20Ezekiel/.gitignore). Se proporciona en su lugar [terraform.tfvars.example](file:///d:/DevOps/SOC%20Ezekiel/terraform.tfvars.example) con datos ficticios.
-> * **Datos de Eventos:** El CloudTrail está configurado para omitir *Data Events* (lecturas/escrituras individuales de S3 e invocaciones de Lambdas), ya que pueden contener información sensible en los payloads de datos.
+### Paso 6: Confirmar la Suscripción del SOC
+> [!IMPORTANT]
+> Recibirás un correo electrónico de AWS SNS en la dirección configurada en `alert_email` con el asunto **"AWS Notification - Subscription Confirmation"**. Debes abrirlo y hacer clic en **"Confirm subscription"** para empezar a recibir alertas de seguridad en tiempo real.
 
 ---
 
-## 📂 Estructura del Proyecto
+## 💻 Ejemplo de Uso y Comandos Principales
 
-* [main.tf](file:///d:/DevOps/SOC%20Ezekiel/main.tf): Orquestador raíz que invoca y conecta todos los módulos del SOC.
-* [variables.tf](file:///d:/DevOps/SOC%20Ezekiel/variables.tf): Parámetros de configuración del SOC (regiones, flags para apagar/encender módulos).
-* [outputs.tf](file:///d:/DevOps/SOC%20Ezekiel/outputs.tf): Salidas informativas útiles para el cliente (ej. ARN del canal de alertas SNS, consola de Security Hub).
-* [docs/manual_usuario.md](file:///d:/DevOps/SOC%20Ezekiel/docs/manual_usuario.md): Guía detallada para el despliegue paso a paso, configuración y simulación de ataques para pruebas del SOC.
-* [docs/diagrama_soc.puml](file:///d:/DevOps/SOC%20Ezekiel/docs/diagrama_soc.puml): Diagrama de arquitectura funcional detallado en formato PlantUML.
-* [docs/diagrama_codigo.puml](file:///d:/DevOps/SOC%20Ezekiel/docs/diagrama_codigo.puml): Diagrama técnico de la estructura del código Terraform y flujos de variables.
+### Comandos de Administración de la Infraestructura
+* **Ver estado actual del SOC:**
+  ```bash
+  terraform show
+  ```
+* **Destruir todos los recursos creados (limpieza para evitar cobros futuros):**
+  ```bash
+  terraform destroy
+  ```
+
+### Simulación de Ataque para Probar el SOC (Ejemplo Práctico)
+Puedes forzar un error de autorización para comprobar que las alertas del SIEM y el SOAR están funcionando:
+```bash
+# Intenta listar buckets usando un perfil inexistente o credenciales inválidas
+aws s3 ls --profile perfil-invalido
+```
+* **Resultado:** Esto generará un evento de tipo `AccessDenied` en CloudTrail.
+* **Procesamiento:** El filtro métrico de CloudWatch detectará la anomalía, incrementará el contador de la alarma `soc-ezekiel-unauthorized-api-alarm` y enviará un correo de alerta detallado a tu bandeja en menos de 5 minutos.
 
 ---
 
-## 🚀 Despliegue Rápido (Guía para el Cliente)
+## 📊 Resultado Esperado (Capturas de Pantalla)
 
-### Requisitos Previos
-1. Una cuenta activa de AWS (idealmente en Free Tier o tipo Student).
-2. Tener configurado el **AWS CLI** localmente.
-3. Terraform instalado (versión `>= 1.5.0`).
+Una vez desplegada la infraestructura y generados los primeros eventos de prueba, podrás visualizar el **Dashboard Unificado del SOC** en tu consola de CloudWatch:
 
-### Pasos de Despliegue
-1. **Clonar el repositorio** y situarse en la raíz del proyecto.
-2. **Configurar variables:** Copia la plantilla de ejemplo y edita los valores correspondientes (email, región, ID de cuenta):
-   ```bash
-   cp terraform.tfvars.example terraform.tfvars
-   ```
-3. **Inicializar Terraform:**
-   ```bash
-   terraform init
-   ```
-4. **Planificar el despliegue:** Valida qué recursos se crearán y asegúrate de que no haya errores:
-   ```bash
-   terraform plan
-   ```
-5. **Aplicar los cambios:** Despliega la infraestructura (se solicitará confirmación):
-   ```bash
-   terraform apply
-   ```
-   > [!IMPORTANT]
-   > Una vez finalizado el despliegue, llegará un correo de confirmación de suscripción de AWS SNS a la dirección configurada en `alert_email`. Es obligatorio abrir dicho correo y hacer clic en **"Confirm subscription"** para empezar a recibir las alertas de seguridad generadas por el SOC.
+![Dashboard del SOC en CloudWatch](docs/expected_result_dashboard.png)
+*Figura 1: Vista del Dashboard de CloudWatch configurado automáticamente por Terraform, mostrando métricas de intentos fallidos, llamadas denegadas y logs del SOC.*
+
+---
+
+## 🛠️ Detalle Técnico de los Servicios del SOC
+
+El SOC divide sus operaciones en 5 servicios integrados:
+
+1. **SIEM (Monitoreo e Integridad):** Recolecta logs de auditoría en CloudTrail y VPC Flow Logs en S3, con políticas de ciclo de vida automáticas (Standard ➔ Glacier a los 30 días ➔ eliminación a los 90 días). Cuenta con 7 filtros métricos en CloudWatch para alertar sobre accesos de `root`, acciones sin MFA, o cambios en grupos de seguridad.
+2. **EDR/XDR (Detección de Intrusos):** Amazon GuardDuty analiza patrones de comportamiento sospechosos mediante Machine Learning. AWS Security Hub audita la postura frente a los estándares de seguridad (CIS Benchmark).
+3. **Networking (Micro-segmentación):** Proporciona subredes aisladas y un Security Group de cuarentena (`sg-isolation`) con reglas cerradas de entrada y salida para mitigar movimientos laterales.
+4. **Threat Intelligence:** Ingesta listas de IPs maliciosas conocidas (`malicious-ips.txt`) guardadas en S3 hacia GuardDuty para detectar conexiones de actores maliciosos.
+5. **SOAR (Respuesta Automática):** Enrutado por EventBridge, una máquina de estados de Step Functions coordina funciones Lambda en Python para enriquecer alertas con GeoIP y contener incidentes de forma automática (bloqueo de IPs de atacantes, aislamiento de instancias EC2 y desactivación de claves IAM comprometidas).
+
+---
+
+## 📄 Licencia
+
+Este proyecto está bajo la Licencia **MIT**. Puedes consultar más detalles a continuación:
+
+```text
+MIT License
+
+Copyright (c) 2026 Kevin Antonio Andrade López, Job Yunior, Dulce Esmeralda
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
